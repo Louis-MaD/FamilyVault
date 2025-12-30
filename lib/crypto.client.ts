@@ -1,4 +1,4 @@
-import sodium from 'libsodium-wrappers';
+const sodium = require('libsodium-wrappers-sumo');
 
 // Constants
 const KEY_BYTES = 32; // 256-bit
@@ -19,7 +19,7 @@ export async function generateSalt(): Promise<string> {
  */
 export async function deriveVaultKey(password: string, saltBase64: string): Promise<DerivedKey> {
   await sodium.ready;
-  const salt = sodium.from_base64(saltBase64);
+  const salt = sodium.from_base64(saltBase64, sodium.base64_variants.ORIGINAL);
   
   // Argon2id for Key Derivation
   const key = sodium.crypto_pwhash(
