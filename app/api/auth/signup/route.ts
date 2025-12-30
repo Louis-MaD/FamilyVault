@@ -7,7 +7,7 @@ import { headers } from 'next/headers';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const { email, password, displayName } = body;
 
     if (!email || !password || password.length < 12) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
@@ -23,9 +23,15 @@ export async function POST(req: Request) {
     const userCount = await prisma.user.count();
     const isFirstUser = userCount === 0;
 
+    const inferredDisplayName =
+      typeof displayName === 'string' && displayName.trim().length > 0
+        ? displayName.trim()
+        : email.split('@')[0];
+
     const user = await prisma.user.create({
       data: {
         email,
+        displayName: inferredDisplayName,
         passwordHash,
         kdfSalt,
         role: isFirstUser ? 'ADMIN' : 'MEMBER',

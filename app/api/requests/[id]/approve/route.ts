@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { headers } from 'next/headers';
+import { AccessDeniedError, requireActiveUser } from '@/lib/authz';
 
 export async function POST(
   req: Request,
@@ -14,6 +15,24 @@ export async function POST(
 
   try {
     const requestId = params.id;
+    const body = await req.json();
+    const { wrappedItemKeyForRecipient, expiresAt } = body;
+
+    if (!wrappedItemKeyForRecipient || typeof wrappedItemKeyForRecipient !== 'string') {
+      return NextResponse.json(
+        { error: 'wrappedItemKeyForRecipient is required and must be a string' },
+        { status: 400 }
+      );
+    }
+
+    if (!expiresAt || typeof expiresAt !== 'string' || Number.isNaN(Date.parse(expiresAt))) {
+      return NextResponse.json(
+        { error: 'expiresAt is required and must be an ISO string' },
+        { status: 400 }
+      );
+    }
+
+    await requireActiveUser(session.userId);
 
     // Fetch the request
     const accessRequest = await prisma.accessRequest.findUnique({
@@ -24,6 +43,18 @@ export async function POST(
             id: true,
             title: true,
             ownerUserId: true,
+          },
+        },
+        requester: {
+          select: {
+            id: true,
+            status: true,
+            publicKey: true,
+          },
+        },
+        grant: {
+          select: {
+            id: true,
           },
         },
       },
@@ -49,35 +80,69 @@ export async function POST(
       );
     }
 
-    // Calculate expiration time (1 hour from now)
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1);
+    if (accessRequest.requester.status !== 'ACTIVE') {
+      return NextResponse.json(
+        { error: 'Requester is not active' },
+        { status: 403 }
+      );
+    }
 
-    // Update request status to APPROVED
-    const updatedRequest = await prisma.accessRequest.update({
-      where: { id: requestId },
-      data: {
-        status: 'APPROVED',
-        decidedAt: new Date(),
-        expiresAt,
-      },
-      include: {
-        item: {
-          select: {
-            id: true,
-            title: true,
-            type: true,
-            url: true,
+    if (!accessRequest.requester.publicKey) {
+      return NextResponse.json(
+        { error: 'Requester has not set up a public key yet' },
+        { status: 400 }
+      );
+    }
+
+    if (accessRequest.grant) {
+      return NextResponse.json(
+        { error: 'A grant already exists for this request' },
+        { status: 400 }
+      );
+    }
+
+    const now = new Date();
+    const grantExpiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+
+    const { request: updatedRequest, grant } = await prisma.$transaction(async (tx) => {
+      const request = await tx.accessRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'APPROVED',
+          decidedAt: now,
+          expiresAt: grantExpiresAt,
+        },
+        include: {
+          item: {
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              url: true,
+            },
+          },
+          requester: {
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+            },
           },
         },
-        requester: {
-          select: {
-            id: true,
-            email: true,
-            displayName: true,
-          },
+      });
+
+      const grant = await tx.shareGrant.create({
+        data: {
+          itemId: accessRequest.itemId,
+          fromUserId: accessRequest.ownerUserId,
+          toUserId: accessRequest.requesterUserId,
+          requestId: accessRequest.id,
+          wrappedItemKeyForRecipient,
+          expiresAt: grantExpiresAt,
         },
-      },
+      });
+
+      return { request, grant };
     });
 
     // Create audit event
@@ -92,8 +157,22 @@ export async function POST(
       },
     });
 
+    await prisma.auditEvent.create({
+      data: {
+        actorUserId: session.userId,
+        eventType: 'GRANT_CREATED',
+        targetType: 'SHARE_GRANT',
+        targetId: grant.id,
+        ip: headers().get('x-forwarded-for') || 'unknown',
+        userAgent: headers().get('user-agent') || 'unknown',
+      },
+    });
+
     return NextResponse.json(updatedRequest);
   } catch (error) {
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     console.error('Error approving request:', error);
     return NextResponse.json(
       { error: 'Failed to approve request' },

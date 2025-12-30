@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { headers } from 'next/headers';
+import { AccessDeniedError, requireActiveUser } from '@/lib/authz';
 
 export async function POST(
   req: Request,
@@ -13,6 +14,7 @@ export async function POST(
   }
 
   try {
+    await requireActiveUser(session.userId);
     const requestId = params.id;
 
     // Fetch the request
@@ -80,6 +82,9 @@ export async function POST(
 
     return NextResponse.json(updatedRequest);
   } catch (error) {
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     console.error('Error cancelling request:', error);
     return NextResponse.json(
       { error: 'Failed to cancel request' },

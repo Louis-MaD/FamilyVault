@@ -106,3 +106,82 @@ export async function decryptVaultItem(
   
   return JSON.parse(sodium.to_string(decryptedBytes));
 }
+
+export async function generateKeyPair() {
+  await sodium.ready;
+  const keypair = sodium.crypto_box_keypair();
+  return {
+    publicKey: sodium.to_base64(keypair.publicKey),
+    privateKey: keypair.privateKey,
+  };
+}
+
+export async function encryptPrivateKey(
+  privateKey: Uint8Array,
+  vaultKey: DerivedKey
+): Promise<string> {
+  await sodium.ready;
+  const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+  const encrypted = sodium.crypto_secretbox_easy(privateKey, nonce, vaultKey.key);
+  return `${sodium.to_base64(nonce)}:${sodium.to_base64(encrypted)}`;
+}
+
+export async function decryptPrivateKey(
+  encryptedData: string,
+  vaultKey: DerivedKey
+): Promise<Uint8Array> {
+  await sodium.ready;
+  const [nonceB64, cipherB64] = encryptedData.split(':');
+  if (!nonceB64 || !cipherB64) throw new Error('Invalid encrypted key payload');
+  const nonce = sodium.from_base64(nonceB64);
+  const cipher = sodium.from_base64(cipherB64);
+  return sodium.crypto_secretbox_open_easy(cipher, nonce, vaultKey.key);
+}
+
+export async function unwrapItemKeyFromVault(
+  wrappedItemKey: string,
+  cryptoMeta: any,
+  vaultKey: DerivedKey
+): Promise<Uint8Array> {
+  await sodium.ready;
+  const dekNonce = sodium.from_base64(cryptoMeta.dekNonce);
+  const wrappedDekBytes = sodium.from_base64(wrappedItemKey);
+  return sodium.crypto_secretbox_open_easy(wrappedDekBytes, dekNonce, vaultKey.key);
+}
+
+export async function wrapItemKeyForRecipient(
+  itemDek: Uint8Array,
+  recipientPublicKey: string
+): Promise<string> {
+  await sodium.ready;
+  const pubKey = sodium.from_base64(recipientPublicKey);
+  const sealed = sodium.crypto_box_seal(itemDek, pubKey);
+  return sodium.to_base64(sealed);
+}
+
+export async function unwrapItemKeyFromGrant(
+  wrappedKey: string,
+  publicKey: string,
+  privateKey: Uint8Array
+): Promise<Uint8Array> {
+  await sodium.ready;
+  const sealed = sodium.from_base64(wrappedKey);
+  const pubKeyBytes = sodium.from_base64(publicKey);
+  return sodium.crypto_box_seal_open(sealed, pubKeyBytes, privateKey);
+}
+
+export async function decryptPayloadWithDek(
+  encryptedPayload: string,
+  cryptoMeta: any,
+  dek: Uint8Array
+) {
+  await sodium.ready;
+  const payloadNonce = sodium.from_base64(cryptoMeta.payloadNonce);
+  const payloadBytes = sodium.from_base64(encryptedPayload);
+  const decryptedBytes = sodium.crypto_secretbox_open_easy(
+    payloadBytes,
+    payloadNonce,
+    dek
+  );
+  return JSON.parse(sodium.to_string(decryptedBytes));
+}

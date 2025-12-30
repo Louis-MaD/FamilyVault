@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { headers } from 'next/headers';
+import { AccessDeniedError } from '@/lib/authz';
+import { createAccessRequestForUser } from '@/lib/requests';
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -29,102 +31,30 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch the item with owner info
-    const item = await prisma.vaultItem.findUnique({
-      where: { id: itemId },
-      select: {
-        id: true,
-        ownerUserId: true,
-        visibility: true,
-        requestable: true,
-        title: true,
-      },
-    });
+    const { accessRequest, isNew } = await createAccessRequestForUser(
+      session.userId,
+      itemId,
+      reason || null
+    );
 
-    if (!item) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
-    }
-
-    // Validation: Cannot request your own item
-    if (item.ownerUserId === session.userId) {
-      return NextResponse.json(
-        { error: 'Cannot request access to your own item' },
-        { status: 400 }
-      );
-    }
-
-    // Validation: Item must have FAMILY_METADATA visibility
-    if (item.visibility !== 'FAMILY_METADATA') {
-      return NextResponse.json(
-        { error: 'This item is private and cannot be requested' },
-        { status: 403 }
-      );
-    }
-
-    // Validation: Item must be requestable
-    if (!item.requestable) {
-      return NextResponse.json(
-        { error: 'This item is not requestable' },
-        { status: 403 }
-      );
-    }
-
-    // Check for existing PENDING request
-    const existingRequest = await prisma.accessRequest.findFirst({
-      where: {
-        itemId,
-        requesterUserId: session.userId,
-        status: 'PENDING',
-      },
-    });
-
-    if (existingRequest) {
-      // Return existing pending request
-      return NextResponse.json(existingRequest);
-    }
-
-    // Create new access request
-    const accessRequest = await prisma.accessRequest.create({
-      data: {
-        itemId,
-        requesterUserId: session.userId,
-        ownerUserId: item.ownerUserId,
-        reason: reason || null,
-        status: 'PENDING',
-      },
-      include: {
-        item: {
-          select: {
-            id: true,
-            title: true,
-            type: true,
-            url: true,
-          },
+    if (isNew) {
+      await prisma.auditEvent.create({
+        data: {
+          actorUserId: session.userId,
+          eventType: 'REQUEST_CREATED',
+          targetType: 'ACCESS_REQUEST',
+          targetId: accessRequest.id,
+          ip: headers().get('x-forwarded-for') || 'unknown',
+          userAgent: headers().get('user-agent') || 'unknown',
         },
-        requester: {
-          select: {
-            id: true,
-            email: true,
-            displayName: true,
-          },
-        },
-      },
-    });
+      });
+    }
 
-    // Create audit event
-    await prisma.auditEvent.create({
-      data: {
-        actorUserId: session.userId,
-        eventType: 'REQUEST_CREATED',
-        targetType: 'ACCESS_REQUEST',
-        targetId: accessRequest.id,
-        ip: headers().get('x-forwarded-for') || 'unknown',
-        userAgent: headers().get('user-agent') || 'unknown',
-      },
-    });
-
-    return NextResponse.json(accessRequest, { status: 201 });
+    return NextResponse.json(accessRequest, { status: isNew ? 201 : 200 });
   } catch (error) {
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     console.error('Error creating access request:', error);
     return NextResponse.json(
       { error: 'Failed to create access request' },

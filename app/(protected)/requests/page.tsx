@@ -1,6 +1,8 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { Inbox, Send, FileKey, StickyNote, Clock, CheckCircle, XCircle, Ban } from 'lucide-react';
+import { useVault } from '@/components/VaultContext';
+import { unwrapItemKeyFromVault, wrapItemKeyForRecipient } from '@/lib/crypto.client';
 
 type RequestStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'CANCELLED' | 'EXPIRED';
 
@@ -18,11 +20,14 @@ interface AccessRequest {
     title: string;
     type: string;
     url: string | null;
+    wrappedItemKey?: string;
+    cryptoMeta?: any;
   };
   requester?: {
     id: string;
     email: string;
     displayName: string | null;
+    publicKey?: string | null;
   };
   owner?: {
     id: string;
@@ -32,14 +37,37 @@ interface AccessRequest {
 }
 
 export default function RequestsPage() {
+  const { isUnlocked, vaultKey } = useVault();
   const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [incomingRequests, setIncomingRequests] = useState<AccessRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userStatus, setUserStatus] = useState<'ACTIVE' | 'PENDING' | 'DISABLED' | ''>('');
 
   useEffect(() => {
-    fetchRequests();
+    fetchUserStatus();
   }, []);
+
+  useEffect(() => {
+    if (!userStatus) return;
+    if (userStatus !== 'ACTIVE') {
+      setLoading(false);
+      return;
+    }
+    fetchRequests();
+  }, [userStatus]);
+
+  const fetchUserStatus = async () => {
+    try {
+      const res = await fetch('/api/user/me');
+      if (res.ok) {
+        const data = await res.json();
+        setUserStatus(data.status);
+      }
+    } catch (error) {
+      console.error('Error fetching user status:', error);
+    }
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -65,10 +93,38 @@ export default function RequestsPage() {
     }
   };
 
-  const handleApprove = async (requestId: string) => {
+  const handleApprove = async (request: AccessRequest) => {
+    if (!isUnlocked || !vaultKey) {
+      alert('Unlock your vault to approve requests.');
+      return;
+    }
+
+    if (!request.requester?.publicKey) {
+      alert('Requester has not set up a public key yet.');
+      return;
+    }
+
+    if (!request.item.wrappedItemKey || !request.item.cryptoMeta) {
+      alert('Missing item encryption data.');
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/requests/${requestId}/approve`, {
+      const itemDek = await unwrapItemKeyFromVault(
+        request.item.wrappedItemKey,
+        request.item.cryptoMeta,
+        vaultKey
+      );
+      const wrappedItemKeyForRecipient = await wrapItemKeyForRecipient(
+        itemDek,
+        request.requester.publicKey
+      );
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      const res = await fetch(`/api/requests/${request.id}/approve`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wrappedItemKeyForRecipient, expiresAt }),
       });
 
       if (res.ok) {
@@ -198,7 +254,7 @@ export default function RequestsPage() {
                 {isIncoming ? (
                   <>
                     <button
-                      onClick={() => handleApprove(request.id)}
+                      onClick={() => handleApprove(request)}
                       className="flex-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
                     >
                       Approve
@@ -232,6 +288,18 @@ export default function RequestsPage() {
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Access Requests</h1>
+
+      {userStatus && userStatus !== 'ACTIVE' && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">
+          Your account is awaiting approval from an admin. You'll be able to manage requests once activated.
+        </div>
+      )}
+
+      {userStatus === 'ACTIVE' && !isUnlocked && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-800 rounded">
+          Unlock your vault to approve incoming requests.
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-gray-200">

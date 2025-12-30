@@ -13,7 +13,10 @@ export async function GET() {
     select: {
       id: true,
       email: true,
+      displayName: true,
       kdfSalt: true,
+      role: true,
+      status: true,
       totpEnabled: true,
       createdAt: true,
     },

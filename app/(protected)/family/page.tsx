@@ -30,15 +30,14 @@ export default function FamilyVaultPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [userStatus, setUserStatus] = useState<'ACTIVE' | 'PENDING' | 'DISABLED' | ''>('');
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FamilyItem | null>(null);
   const [requestReason, setRequestReason] = useState('');
 
   useEffect(() => {
-    fetchItems();
     fetchCurrentUser();
-    fetchMyRequests();
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -47,11 +46,22 @@ export default function FamilyVaultPage() {
       if (res.ok) {
         const user = await res.json();
         setCurrentUserId(user.id);
+        setUserStatus(user.status);
       }
     } catch (error) {
       console.error('Error fetching current user:', error);
     }
   };
+
+  useEffect(() => {
+    if (!userStatus) return;
+    if (userStatus !== 'ACTIVE') {
+      setLoading(false);
+      return;
+    }
+    fetchItems();
+    fetchMyRequests();
+  }, [userStatus]);
 
   const fetchItems = async (query = '') => {
     setLoading(true);
@@ -63,6 +73,8 @@ export default function FamilyVaultPage() {
       if (res.ok) {
         const data = await res.json();
         setItems(data);
+      } else if (res.status === 403) {
+        setItems([]);
       } else {
         console.error('Failed to fetch items');
       }
@@ -87,6 +99,7 @@ export default function FamilyVaultPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (userStatus !== 'ACTIVE') return;
     fetchItems(searchQuery);
   };
 
@@ -165,6 +178,12 @@ export default function FamilyVaultPage() {
         <h1 className="text-3xl font-bold">Family Vault</h1>
       </div>
 
+      {userStatus && userStatus !== 'ACTIVE' && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">
+          Your account is awaiting approval from an admin. Once activated, you'll be able to view and request family items.
+        </div>
+      )}
+
       <p className="text-gray-600 mb-6">
         View passwords and notes shared by your family members. You can see metadata but need to request access for actual credentials.
       </p>
@@ -207,7 +226,7 @@ export default function FamilyVaultPage() {
       )}
 
       {/* Grouped Items */}
-      {!loading && visibleGroups.map(([ownerName, groupItems]) => {
+      {!loading && userStatus === 'ACTIVE' && visibleGroups.map(([ownerName, groupItems]) => {
         const isMine = groupItems.some(i => i.ownerUserId === currentUserId);
         const sortedItems = groupItems.sort((a, b) => a.title.localeCompare(b.title));
 
@@ -298,7 +317,7 @@ export default function FamilyVaultPage() {
       })}
 
       {/* Request Access Modal */}
-      {showRequestModal && selectedItem && (
+      {userStatus === 'ACTIVE' && showRequestModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">

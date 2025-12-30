@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { AccessDeniedError, requireActiveUser } from '@/lib/authz';
 
 export async function GET() {
   const session = await getSession();
@@ -9,6 +10,7 @@ export async function GET() {
   }
 
   try {
+    await requireActiveUser(session.userId);
     // Fetch requests where current user is the requester
     const requests = await prisma.accessRequest.findMany({
       where: {
@@ -39,6 +41,9 @@ export async function GET() {
 
     return NextResponse.json(requests);
   } catch (error) {
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     console.error('Error fetching outgoing requests:', error);
     return NextResponse.json(
       { error: 'Failed to fetch outgoing requests' },
