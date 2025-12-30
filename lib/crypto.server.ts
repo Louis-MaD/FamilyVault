@@ -1,7 +1,19 @@
 import sodium from 'libsodium-wrappers';
+import { randomBytes } from 'crypto';
 
 const SERVER_KEY_HEX = process.env.SERVER_ENCRYPTION_KEY || '';
 const ready = sodium.ready;
+
+/**
+ * Generate a random salt for KDF (server-side)
+ * Must match libsodium's crypto_pwhash_SALTBYTES (16 bytes)
+ * Using Node.js crypto for server-side compatibility
+ */
+export function generateSalt(): string {
+  // Generate 16 bytes to match sodium.crypto_pwhash_SALTBYTES
+  const salt = randomBytes(16);
+  return salt.toString('base64');
+}
 
 export async function encryptServerSecret(plaintext: string): Promise<string> {
   await ready;

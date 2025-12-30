@@ -107,8 +107,9 @@ Follow step 2 from the Docker setup to create your `.env` file.
 ### 4. Run Database Migrations
 
 ```bash
-npx prisma migrate dev --name init
-npx prisma generate
+# Use the local Prisma version from package.json
+npm run prisma:migrate:dev -- --name init
+npm run prisma:generate
 ```
 
 ### 5. Start the Application

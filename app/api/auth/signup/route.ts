@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
-import { generateSalt } from '@/lib/crypto.client';
+import { generateSalt } from '@/lib/crypto.server';
 import { headers } from 'next/headers';
 
 export async function POST(req: Request) {
