@@ -24,22 +24,26 @@ export default function VaultList() {
 
   // Fetch Items and User Salt
   useEffect(() => {
-    // In a real app, we might want a specific endpoint for user public config (salt)
-    // For MVP, we'll try to get it from a 'me' endpoint or assume we know it from login flow (not persisted here though)
-    // Actually, good practice: Get salt from API by email during login, but here we are already logged in.
-    // Let's assume we can fetch our own user details.
-    // Since we don't have a specific user/me endpoint in the file list, we'll create a simple fetch for items
-    // and we might need to prompt for salt or just rely on the user knowing their password + us fetching salt from server.
-    
-    // NOTE: In this MVP design, we need the salt to derive the key. 
-    // We should fetch the salt from the server for the current user.
-    // I'll assume we can't easily get it without an endpoint.
-    // For now, let's just fetch items.
-    
-    fetch('/api/vault').then(res => {
-      if(res.ok) return res.json();
-      return [];
-    }).then(setItems);
+    // Fetch user's KDF salt from the server
+    fetch('/api/user/me')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch user data');
+      })
+      .then(userData => {
+        setSalt(userData.kdfSalt);
+      })
+      .catch(err => {
+        console.error('Error fetching user data:', err);
+      });
+
+    // Fetch vault items
+    fetch('/api/vault')
+      .then(res => {
+        if (res.ok) return res.json();
+        return [];
+      })
+      .then(setItems);
   }, []);
 
   // Decrypt items when vault is unlocked
@@ -68,23 +72,18 @@ export default function VaultList() {
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real implementation, we need the KDF Salt. 
-    // For this MVP fix, I'll simulate fetching it or using a fixed one if not available, 
-    // BUT the correct way is to fetch it.
-    // Let's Mock it or Fetch it.
-    // We don't have the "me" endpoint in the provided files.
-    // I will use a placeholder salt for demonstration if undefined.
-    // Wait, the signup created a salt. We must use THAT salt.
-    // I'll add a fetch for it inside handleUnlock or assume a component above passes it.
-    // For this fix, I'll assume standard salt or prompt user.
-    // Actually, I can't derive the correct key without the correct salt.
-    // I'll leave a TODO or try to fetch.
-    
-    // Quick fix: Fetch salt from an endpoint I haven't defined?
-    // Let's just try to unlock.
-    const success = await unlockVault(pwd, salt || 'mock-salt-if-missing');
-    if (!success) alert('Incorrect password');
-    else setPwd('');
+
+    if (!salt) {
+      alert('Salt not loaded. Please refresh the page.');
+      return;
+    }
+
+    const success = await unlockVault(pwd, salt);
+    if (!success) {
+      alert('Incorrect password');
+    } else {
+      setPwd('');
+    }
   };
 
   if (!isUnlocked) {
@@ -94,22 +93,20 @@ export default function VaultList() {
         <h2 className="text-xl mb-4 font-bold">Vault Locked</h2>
         <p className="text-sm text-gray-500 mb-4">Enter your master password to decrypt locally.</p>
         <form onSubmit={handleUnlock}>
-          {/* We need the salt. For MVP, we might need to ask username again to fetch salt? 
-              Or just fetch 'me' if session exists. */}
-          <input 
-             type="text"
-             className="hidden" // hidden input to store salt if we had it
-             value={salt}
-             readOnly
-          />
-          <input 
-            type="password" 
-            className="border p-2 w-full rounded mb-4" 
+          <input
+            type="password"
+            className="border p-2 w-full rounded mb-4"
             placeholder="Master Password"
             value={pwd}
             onChange={e => setPwd(e.target.value)}
+            required
           />
-          <button className="bg-green-600 text-white w-full py-2 rounded hover:bg-green-700">Unlock Vault</button>
+          <button
+            className="bg-green-600 text-white w-full py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
+            disabled={!salt}
+          >
+            {salt ? 'Unlock Vault' : 'Loading...'}
+          </button>
         </form>
       </div>
     );

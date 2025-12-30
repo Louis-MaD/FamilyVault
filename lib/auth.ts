@@ -1,9 +1,22 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import argon2 from 'argon2';
+import { createHash } from 'crypto';
 import { prisma } from './db';
 
+// Validate SESSION_SECRET on module load
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+  throw new Error('SESSION_SECRET must be set and at least 32 characters long');
+}
+
 const SESSION_SECRET = new TextEncoder().encode(process.env.SESSION_SECRET);
+
+/**
+ * Hash a session token using SHA-256
+ */
+function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 export async function hashPassword(password: string): Promise<string> {
   return await argon2.hash(password, { type: argon2.argon2id });
@@ -22,10 +35,13 @@ export async function createSession(userId: string) {
 
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+  // Store SHA-256 hash of the token, not the token itself
+  const tokenHash = hashSessionToken(token);
+
   await prisma.session.create({
     data: {
       userId,
-      sessionTokenHash: token, 
+      sessionTokenHash: tokenHash,
       expiresAt: expires,
     },
   });
@@ -45,9 +61,13 @@ export async function getSession() {
 
   try {
     const { payload } = await jwtVerify(token, SESSION_SECRET);
+
+    // Hash the token to look it up in the database
+    const tokenHash = hashSessionToken(token);
+
     const session = await prisma.session.findFirst({
       where: {
-        sessionTokenHash: token,
+        sessionTokenHash: tokenHash,
         expiresAt: { gt: new Date() },
       },
     });

@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   }
 
   await createSession(user.id);
-  
+
   await prisma.auditEvent.create({
       data: {
         actorUserId: user.id,
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
         targetType: 'USER',
         targetId: user.id,
         ip: headers().get('x-forwarded-for') || 'unknown',
+        userAgent: headers().get('user-agent') || 'unknown',
       }
   });
 

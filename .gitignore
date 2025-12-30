@@ -12,6 +12,24 @@ dist
 dist-ssr
 *.local
 
+# Environment variables - CRITICAL: Never commit these!
+.env
+.env.*
+!.env.example
+
+# Next.js
+.next/
+out/
+build/
+
+# Prisma
+prisma/migrations/*
+!prisma/migrations/.gitkeep
+
+# Database
+*.db
+*.sqlite
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

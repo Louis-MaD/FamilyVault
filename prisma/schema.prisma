@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  passwordHash String
+  kdfSalt   String   // Base64-encoded salt for client-side key derivation
+
+  // 2FA fields
+  totpEnabled         Boolean @default(false)
+  totpSecretEncrypted String? // Server-side encrypted TOTP secret
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  vaultItems VaultItem[]
+  sessions   Session[]
+  auditEvents AuditEvent[]
+
+  @@index([email])
+}
+
+model VaultItem {
+  id       String   @id @default(cuid())
+
+  // Ownership
+  ownerUserId String
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  // Metadata (unencrypted)
+  type  String  // 'PASSWORD' | 'NOTE'
+  title String
+  tags  String[] @default([])
+
+  // Encrypted fields
+  wrappedItemKey   String // DEK encrypted with user's vault key
+  encryptedPayload String // Actual data encrypted with DEK
+  cryptoMeta       Json   // { alg, dekNonce, payloadNonce }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerUserId])
+  @@index([type])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionTokenHash String   @unique // SHA-256 hash of JWT token
+  expiresAt        DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditEvent {
+  id      String   @id @default(cuid())
+
+  actorUserId String
+  actor       User   @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  eventType  String  // 'SIGNUP', 'LOGIN', 'LOGOUT', 'CREATE_ITEM', 'DELETE_ITEM', etc.
+  targetType String  // 'USER', 'VAULT_ITEM', etc.
+  targetId   String
+
+  ip        String
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([eventType])
+  @@index([createdAt])
+}
