@@ -17,10 +17,20 @@ export async function POST(req: Request) {
     if (existing) return NextResponse.json({ error: 'User exists' }, { status: 400 });
 
     const passwordHash = await hashPassword(password);
-    const kdfSalt = await generateSalt();
+    const kdfSalt = generateSalt();
+
+    // Check if this is the first user (becomes ADMIN+ACTIVE)
+    const userCount = await prisma.user.count();
+    const isFirstUser = userCount === 0;
 
     const user = await prisma.user.create({
-      data: { email, passwordHash, kdfSalt },
+      data: {
+        email,
+        passwordHash,
+        kdfSalt,
+        role: isFirstUser ? 'ADMIN' : 'MEMBER',
+        status: isFirstUser ? 'ACTIVE' : 'PENDING',
+      },
     });
 
     await prisma.auditEvent.create({

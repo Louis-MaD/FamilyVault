@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tasklist:*)",
+      "Bash(taskkill:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(npm test:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose build:*)"
+    ]
+  }
+}

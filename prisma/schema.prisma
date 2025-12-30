@@ -11,15 +11,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  DISABLED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
+  displayName String? // Display name for family vault, defaults to email prefix
   passwordHash String
   kdfSalt   String   // Base64-encoded salt for client-side key derivation
+
+  // Membership
+  role   UserRole   @default(MEMBER)
+  status UserStatus @default(PENDING)
 
   // 2FA fields
   totpEnabled         Boolean @default(false)
   totpSecretEncrypted String? // Server-side encrypted TOTP secret
+
+  // Public key cryptography for sharing
+  publicKey            String? // Base64-encoded libsodium public key
+  encryptedPrivateKey  String? // Private key encrypted with vault key
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -28,8 +48,19 @@ model User {
   vaultItems VaultItem[]
   sessions   Session[]
   auditEvents AuditEvent[]
+  requestsMade AccessRequest[] @relation("Requester")
+  requestsReceived AccessRequest[] @relation("Owner")
+  grantsGiven ShareGrant[] @relation("GrantGiver")
+  grantsReceived ShareGrant[] @relation("GrantRecipient")
 
   @@index([email])
+  @@index([status])
+  @@index([role])
+}
+
+enum Visibility {
+  PRIVATE
+  FAMILY_METADATA
 }
 
 model VaultItem {
@@ -42,7 +73,12 @@ model VaultItem {
   // Metadata (unencrypted)
   type  String  // 'PASSWORD' | 'NOTE'
   title String
+  url   String? // Plaintext URL for family vault visibility
   tags  String[] @default([])
+
+  // Family vault settings
+  visibility  Visibility @default(FAMILY_METADATA)
+  requestable Boolean    @default(true)
 
   // Encrypted fields
   wrappedItemKey   String // DEK encrypted with user's vault key
@@ -52,8 +88,13 @@ model VaultItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
+  accessRequests AccessRequest[]
+  shareGrants ShareGrant[]
+
   @@index([ownerUserId])
   @@index([type])
+  @@index([visibility])
 }
 
 model Session {
@@ -88,4 +129,86 @@ model AuditEvent {
   @@index([actorUserId])
   @@index([eventType])
   @@index([createdAt])
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+  EXPIRED
+}
+
+model AccessRequest {
+  id String @id @default(cuid())
+
+  // Item being requested
+  itemId String
+  item   VaultItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  // Requester (family member asking for access)
+  requesterUserId String
+  requester       User   @relation("Requester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  // Owner (person who owns the vault item)
+  ownerUserId String
+  owner       User   @relation("Owner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  // Request details
+  reason String? // Optional reason for requesting access
+  status RequestStatus @default(PENDING)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  decidedAt DateTime? // When approved/denied
+  expiresAt DateTime? // When approved access expires (1 hour after approval)
+
+  // Decision details
+  decisionNote String? // Optional note from owner when approving/denying
+
+  // Relations
+  grant ShareGrant?
+
+  // Indexes for efficient queries
+  @@index([ownerUserId]) // Owner's inbox
+  @@index([requesterUserId]) // Requester's history
+  @@index([itemId])
+  @@index([status])
+
+  // Prevent duplicate pending requests
+  @@unique([requesterUserId, itemId, status])
+}
+
+model ShareGrant {
+  id String @id @default(cuid())
+
+  // Item being shared
+  itemId String
+  item   VaultItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  // Grantor (owner sharing the item)
+  fromUserId String
+  fromUser   User   @relation("GrantGiver", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  // Recipient (family member receiving access)
+  toUserId String
+  toUser   User   @relation("GrantRecipient", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  // Associated request (optional - can grant without request)
+  requestId String? @unique
+  request   AccessRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  // Encrypted item key for recipient
+  wrappedItemKeyForRecipient String // Item DEK wrapped with recipient's public key
+
+  // Grant lifecycle
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  // Indexes
+  @@index([toUserId]) // Recipient's grants
+  @@index([fromUserId]) // Grantor's grants
+  @@index([itemId])
+  @@index([expiresAt])
 }
