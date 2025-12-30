@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "npx prisma migrate deploy && npm start"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://vaultuser:vaultpass@db:5432/vaultdb
+      - SESSION_SECRET=replace_this_with_long_random_string_local_only
+      - SERVER_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+      - APP_ORIGIN=http://localhost:3000
+      - NODE_ENV=production
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vaultuser
+      POSTGRES_PASSWORD: vaultpass
+      POSTGRES_DB: vaultdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
