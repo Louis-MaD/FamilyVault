@@ -55,6 +55,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/argon2 ./node_modules/argon2
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/node-gyp-build ./node_modules/node-gyp-build
 
+# Create data directory with correct permissions
+RUN mkdir -p /app/data/uploads && chown -R nextjs:nodejs /app/data
+
 USER nextjs
 
 EXPOSE 3000
