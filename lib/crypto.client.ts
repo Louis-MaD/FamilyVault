@@ -2,6 +2,7 @@ const sodium = require('libsodium-wrappers-sumo');
 
 // Constants
 const KEY_BYTES = 32; // 256-bit
+const FILE_DEK_BYTES = 32; // 256-bit for file encryption
 
 export interface DerivedKey {
   key: Uint8Array;
@@ -184,4 +185,76 @@ export async function decryptPayloadWithDek(
     dek
   );
   return JSON.parse(sodium.to_string(decryptedBytes));
+}
+
+// ============================================================================
+// File Encryption/Decryption
+// ============================================================================
+
+/**
+ * Encrypt file bytes with XChaCha20-Poly1305
+ * Returns: encrypted bytes + wrapped file key + crypto metadata
+ */
+export async function encryptFile(
+  fileBytes: Uint8Array,
+  vaultKey: DerivedKey
+) {
+  await sodium.ready;
+
+  // 1. Generate random File DEK
+  const fileDek = sodium.randombytes_buf(FILE_DEK_BYTES);
+
+  // 2. Generate nonce for file encryption
+  const fileNonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+
+  // 3. Encrypt file bytes with File DEK
+  const encryptedBytes = sodium.crypto_secretbox_easy(fileBytes, fileNonce, fileDek);
+
+  // 4. Wrap File DEK with vault key
+  const dekNonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+  const wrappedFileDek = sodium.crypto_secretbox_easy(fileDek, dekNonce, vaultKey.key);
+
+  return {
+    encryptedBytes, // Uint8Array of encrypted file
+    wrappedFileKey: sodium.to_base64(wrappedFileDek),
+    cryptoMeta: {
+      alg: 'xchacha20poly1305',
+      fileNonce: sodium.to_base64(fileNonce),
+      dekNonce: sodium.to_base64(dekNonce),
+    },
+  };
+}
+
+/**
+ * Decrypt file bytes
+ * Takes: encrypted bytes + wrapped file key + crypto metadata + vault key
+ * Returns: decrypted file bytes
+ */
+export async function decryptFile(
+  encryptedBytes: Uint8Array,
+  wrappedFileKey: string,
+  cryptoMeta: any,
+  vaultKey: DerivedKey
+): Promise<ArrayBuffer> {
+  await sodium.ready;
+
+  // 1. Unwrap File DEK using vault key
+  const wrappedFileDekBytes = sodium.from_base64(wrappedFileKey);
+  const dekNonce = sodium.from_base64(cryptoMeta.dekNonce);
+  const fileDek = sodium.crypto_secretbox_open_easy(
+    wrappedFileDekBytes,
+    dekNonce,
+    vaultKey.key
+  );
+
+  // 2. Decrypt file bytes with File DEK
+  const fileNonce = sodium.from_base64(cryptoMeta.fileNonce);
+  const decryptedBytes = sodium.crypto_secretbox_open_easy(
+    encryptedBytes,
+    fileNonce,
+    fileDek
+  );
+
+  // Return as ArrayBuffer for Blob compatibility
+  return new Uint8Array(decryptedBytes).buffer;
 }

@@ -40,3 +40,6 @@ prisma/migrations/*
 *.njsproj
 *.sln
 *.sw?
+
+nul
+NUL

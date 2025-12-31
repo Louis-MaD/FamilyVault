@@ -123,12 +123,16 @@ export default function VaultList() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {items.map(item => (
-          <div key={item.id} className="bg-white p-4 rounded shadow border border-gray-200">
+          <Link
+            key={item.id}
+            href={`/vault/${item.id}`}
+            className="bg-white p-4 rounded shadow border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
+          >
             <div className="flex items-center gap-2 mb-2">
               {item.type === 'PASSWORD' ? <FileKey size={20} className="text-blue-500"/> : <StickyNote size={20} className="text-yellow-500"/>}
               <h3 className="font-bold text-lg">{item.title}</h3>
             </div>
-            
+
             <div className="text-sm text-gray-600 min-h-[60px]">
               {item.decryptedData ? (
                 <div>
@@ -137,8 +141,11 @@ export default function VaultList() {
                        <p className="mb-1 font-semibold">{item.decryptedData.username}</p>
                        <div className="flex gap-2 items-center bg-gray-100 p-1 rounded justify-between">
                          <span className="font-mono text-xs truncate">********</span>
-                         <button 
-                            onClick={() => navigator.clipboard.writeText(item.decryptedData.password)}
+                         <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigator.clipboard.writeText(item.decryptedData.password);
+                            }}
                             title="Copy Password"
                             className="text-gray-500 hover:text-blue-600"
                          >
@@ -155,7 +162,7 @@ export default function VaultList() {
                 <span className="italic text-gray-400">Decrypting...</span>
               )}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

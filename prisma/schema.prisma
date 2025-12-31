@@ -52,6 +52,7 @@ model User {
   requestsReceived AccessRequest[] @relation("Owner")
   grantsGiven ShareGrant[] @relation("GrantGiver")
   grantsReceived ShareGrant[] @relation("GrantRecipient")
+  fileBlobs FileBlob[]
 
   @@index([email])
   @@index([status])
@@ -91,6 +92,7 @@ model VaultItem {
   // Relations
   accessRequests AccessRequest[]
   shareGrants ShareGrant[]
+  fileBlobs FileBlob[]
 
   @@index([ownerUserId])
   @@index([type])
@@ -211,4 +213,35 @@ model ShareGrant {
   @@index([fromUserId]) // Grantor's grants
   @@index([itemId])
   @@index([expiresAt])
+}
+
+model FileBlob {
+  id String @id @default(cuid())
+
+  // Owner
+  ownerUserId String
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  // File metadata
+  title      String?
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  storagePath String
+
+  // Encryption
+  wrappedFileKey String? // File DEK wrapped with user's vault key
+  cryptoMeta     Json?   // {alg, nonce}
+
+  // Optional association with vault item
+  itemId String?
+  item   VaultItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Indexes
+  @@index([ownerUserId, createdAt])
+  @@index([ownerUserId, title])
+  @@index([ownerUserId, filename])
 }
