@@ -61,7 +61,8 @@ model User {
 
 enum Visibility {
   PRIVATE
-  FAMILY_METADATA
+  PUBLIC
+  FAMILY_REQUEST
 }
 
 model VaultItem {
@@ -78,7 +79,7 @@ model VaultItem {
   tags  String[] @default([])
 
   // Family vault settings
-  visibility  Visibility @default(FAMILY_METADATA)
+  visibility  Visibility @default(FAMILY_REQUEST)
   requestable Boolean    @default(true)
 
   // Encrypted fields

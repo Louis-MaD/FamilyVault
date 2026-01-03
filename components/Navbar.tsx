@@ -38,7 +38,7 @@ export default function Navbar({ isLoggedIn }: { isLoggedIn: boolean }) {
               <Link href="/vault" className="hover:text-blue-400">My Vault</Link>
               <Link href="/family" className="hover:text-blue-400">Family Vault</Link>
               <Link href="/requests" className="hover:text-blue-400">Requests</Link>
-              <Link href="/shared" className="hover:text-blue-400">Shared With Me</Link>
+              {/* Shared link removed */}
               {userRole === 'ADMIN' && (
                 <Link href="/admin/family" className="hover:text-blue-400">Admin</Link>
               )}

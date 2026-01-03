@@ -32,8 +32,8 @@ export async function createAccessRequestForUser(
     throw new AccessDeniedError('Item owner is not active', 403);
   }
 
-  if (item.visibility !== 'FAMILY_METADATA') {
-    throw new AccessDeniedError('This item is private and cannot be requested', 403);
+  if (item.visibility !== 'FAMILY_REQUEST') {
+    throw new AccessDeniedError('This item cannot be requested', 403);
   }
 
   if (!item.requestable) {

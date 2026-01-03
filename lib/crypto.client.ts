@@ -73,7 +73,8 @@ export async function encryptVaultItem(
       alg: 'xchacha20poly1305',
       dekNonce: sodium.to_base64(dekNonce),
       payloadNonce: sodium.to_base64(payloadNonce)
-    }
+    },
+    rawDek: dek // EXPOSE DEK for client-side sharing flows
   };
 }
 

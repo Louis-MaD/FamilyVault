@@ -68,15 +68,12 @@ export default function VaultItemDetail() {
 
   const fetchItem = async () => {
     try {
-      const res = await fetch('/api/vault');
+      const res = await fetch(`/api/vault/${itemId}`);
       if (res.ok) {
-        const items = await res.json();
-        const foundItem = items.find((i: Item) => i.id === itemId);
-        if (foundItem) {
-          setItem(foundItem);
-        } else {
-          router.push('/vault');
-        }
+        const data = await res.json();
+        setItem(data);
+      } else {
+        router.push('/vault');
       }
     } catch (error) {
       console.error('Error fetching item:', error);

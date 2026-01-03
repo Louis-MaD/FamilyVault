@@ -61,14 +61,16 @@ export async function POST(req: Request) {
       );
     }
 
-    await prisma.vaultItem.create({
+    const item = await prisma.vaultItem.create({
       data: {
         ownerUserId: session.userId,
         type: body.type,
         title: body.title.trim(),
         url: body.url && typeof body.url === 'string' ? body.url.trim() : null,
         tags: Array.isArray(body.tags) ? body.tags : [],
-        visibility: body.visibility === 'PRIVATE' ? 'PRIVATE' : 'FAMILY_METADATA',
+        visibility: ['PRIVATE', 'PUBLIC', 'FAMILY_REQUEST'].includes(body.visibility) 
+          ? body.visibility 
+          : 'FAMILY_REQUEST',
         requestable: typeof body.requestable === 'boolean' ? body.requestable : true,
         wrappedItemKey: body.wrappedItemKey,
         encryptedPayload: body.encryptedPayload,
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, id: item.id });
   } catch (error) {
     console.error('Error creating vault item:', error);
     return NextResponse.json(

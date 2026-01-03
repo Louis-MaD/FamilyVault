@@ -8,7 +8,7 @@ interface FamilyItem {
   title: string;
   url: string | null;
   tags: string[];
-  visibility: 'PRIVATE' | 'FAMILY_METADATA';
+  visibility: 'PRIVATE' | 'PUBLIC' | 'FAMILY_REQUEST';
   requestable: boolean;
   ownerUserId: string;
   ownerDisplayName: string;
@@ -291,20 +291,31 @@ export default function FamilyVaultPage() {
                       </div>
                     </div>
 
-                    {/* Request Access Button */}
-                    {!isMine && item.requestable && (
-                      <div className="ml-auto">
-                        {getRequestForItem(item.id) ? (
-                          <span className="text-xs px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded border border-yellow-300">
-                            Requested
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => openRequestModal(item)}
-                            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                    {/* Action Buttons */}
+                    {!isMine && (
+                      <div className="ml-auto flex gap-2">
+                        {item.visibility === 'PUBLIC' ? (
+                          <a
+                            href={`/vault/${item.id}`}
+                            className="text-xs px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center gap-1"
                           >
-                            Request Access
-                          </button>
+                            Open
+                          </a>
+                        ) : (
+                          item.requestable && (
+                            getRequestForItem(item.id) ? (
+                              <span className="text-xs px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded border border-yellow-300">
+                                Requested
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => openRequestModal(item)}
+                                className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                              >
+                                Request Access
+                              </button>
+                            )
+                          )
                         )}
                       </div>
                     )}

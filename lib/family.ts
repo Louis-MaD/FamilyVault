@@ -11,7 +11,7 @@ export async function listFamilyItemsForUser(userId: string, query = '') {
         {
           AND: [
             { ownerUserId: { not: userId } },
-            { visibility: 'FAMILY_METADATA' },
+            { visibility: { in: ['PUBLIC', 'FAMILY_REQUEST'] } },
             { owner: { status: 'ACTIVE' } },
           ],
         },
