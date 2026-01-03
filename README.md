@@ -52,7 +52,6 @@ This application implements industry-standard security practices:
 - HttpOnly, Secure, SameSite cookies
 - Audit logging
 
-**Important**: Never commit your `.env` file. Always use strong, randomly generated secrets in production.
 
 ## Documentation
 
